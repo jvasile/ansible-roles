@@ -1,0 +1,95 @@
+# This is an ansible role that uses certbot webroot to get Let's
+# Encrypt ssl keys.  It works on Debian boxes running Apache2.
+
+# You will need to set two variables:
+
+# apache_server_name = the url you're making a cert for
+# certbot_email = your email so you get reminders to renew
+
+#   vars:
+#      apache_server_name: sharks.withlasers.com
+#      certbot_email = your@email.address.com
+
+# This role sets up a temporary apache configuration that handles
+# requests to the {{ apache_server_name }} domain.  It fulfills those
+# requests by looking in /var/www/certbot.
+
+# Certbot puts some secrets in that directory, then tells the Let's
+# Encrypt server to go to https://{{apache_server_name}} and try to
+# get them.  If that succeeds, then Let's Encrypt knows you have
+# control over this domain and it will issue you a set of ssl keys.
+
+# Because this role needs to point http://{{apache_server_name}} at
+# the certbot directory.  We don't run services on port 80 except to
+# redirect to 443.  If you already have a service on
+# https://{{apache_server_name}}, you'll have to comment out the port
+# 80 redirection stuff in its config so as not to conflict with the
+# certbot port 80 config.
+
+# Note that you can add '--staging' to the certbot invocation below to
+# avoid hitting the Let's Encrypt rate limits.  Use that for testing
+# if you like.
+
+# This role uses the webroot method instead of just calling certbot
+# --apache.  We are, essentially, reinventing the --apache method.
+# The certbot website says "Due to a security issue, Let's Encrypt has
+# stopped offering the mechanism that the Apache plugin previously
+# used to prove you control a domain." and then it gives a bunch of
+# instrux for getting around that.  This, to me, was a simpler way to
+# do it via ansible.  When certbot is fixed on Debian, maybe we should
+# rewrite this.
+
+# TODO: ansible galaxy
+---
+- name: Apt install apache dependencies
+  apt:
+    name: apache2 certbot
+    update_cache: no
+
+- name: Upload Apache certbot config
+  # This is a temp config we use just to get the ssl stuff done
+  template:
+    src: roles/apache-certbot/templates/certbot.apache.conf
+    dest: /etc/apache2/sites-enabled/certbot.apache.conf
+    
+- name: Create certbot webroot
+  file:
+    path: /var/www/certbot
+    state: directory
+  
+- name: Reload apache2 with certbot service
+  systemd:
+    name: apache2
+    state: reloaded
+
+- name: Clear out any old lets encrypt config
+  # We don't want conf files and keys with 001 in the name
+  file:
+    path: /etc/letsencrypt/renewal/{{ apache_server_name }}.conf
+    state: absent
+    
+- name: Use certbot http challenge to generate or renew ssl certs
+  shell: certbot certonly -n --webroot --agree-tos --email {{ certbot_email }} -d {{ apache_server_name }} -w /var/www/certbot/
+  
+- name: Remove certbot webroot
+  file:
+    path: /var/www/certbot
+    state: absent
+    
+- name: Remove certbot apache config
+  file:
+    path: /etc/apache2/sites-enabled/certbot.apache.conf
+    state: absent
+
+- name: Reload apache2 without certbot service
+  systemd:
+    name: apache2
+    state: reloaded
+
+- name: "Creates Let's Encrypt certificate renewal cronjob"
+  cron:
+    minute: "33"
+    hour: "5"
+    name: "Renew Let's Encrypt certificates"
+    user: "root"
+    job: "certbot renew -n --post-hook 'systemctl reload apache2'"
