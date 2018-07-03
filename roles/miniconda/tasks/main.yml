@@ -1,0 +1,42 @@
+# Download installer for miniconda, install it via stow
+---
+- name: Install stow
+  action: >
+    {{ ansible_pkg_mgr }} name={{ item }} state=present
+  with_items:
+    - stow
+
+- name: Download miniconda installer
+  get_url:
+    url: https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
+    dest: /tmp/
+    mode: 0755
+    
+- name: Execute miniconda installer script
+  shell: /tmp/Miniconda3-latest-Linux-x86_64.sh -b -f -p /usr/local/stow/miniconda/opt
+    
+- name: Install stow-local-ignore
+  copy:
+    src: roles/miniconda/files/stow-local-ignore
+    dest: /usr/local/stow/miniconda/.stow-local-ignore
+    owner: root
+    group: root
+    mode: 0644
+    
+- name: Make miniconda stow bin directory
+  file:
+    path: /usr/local/stow/miniconda/bin
+    state: directory
+    
+- name: Symlink conda
+  file:
+    src: /usr/local/stow/miniconda/opt/bin/conda
+    dest: /usr/local/stow/miniconda/bin/conda
+    state: link
+    
+- name: Stow miniconda
+  shell: stow -R miniconda
+  args:
+    chdir: /usr/local/stow
+    
+
