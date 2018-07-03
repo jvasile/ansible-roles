@@ -1,10 +1,16 @@
 # See ../README.md for documentation
 ---
-- name: Apt install apache dependencies
-  apt:
-    name: apache2 certbot
-    update_cache: no
+- name: Install apache dependencies
+  action: >
+    {{ ansible_pkg_mgr }} name={{ item }} state=present
+  with_items:
+    - apache2
+    - certbot
 
+- name: Disable the default apache site
+  shell: a2dissite 000-default
+  ignore_errors: yes
+    
 - name: Upload Apache certbot config
   # This is a temp config we use just to get the ssl stuff done
   template:
@@ -28,7 +34,7 @@
     state: absent
     
 - name: Use certbot http challenge to generate or renew ssl certs
-  shell: certbot certonly -n --webroot --agree-tos --email {{ certbot_email }} -d {{ apache_server_name }} -w /var/www/certbot/
+  shell: certbot certonly -n --webroot --agree-tos --email {{ certbot_email }} -d {{','.join(apache_server_name)|safe}} -w /var/www/certbot/
   
 - name: Remove certbot webroot
   file:
