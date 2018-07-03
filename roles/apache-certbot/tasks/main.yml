@@ -16,8 +16,6 @@
   template:
     src: roles/apache-certbot/templates/certbot.apache.conf
     dest: /etc/apache2/sites-enabled/certbot.apache.conf
-  tags:
-    debug
     
 - name: Create certbot webroot
   file:
