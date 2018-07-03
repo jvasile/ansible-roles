@@ -18,7 +18,9 @@ I put something like this in a `foo.example.com.yml` file:
         - { role: apache-certbot, tags: ["apache-certbot"] }
     
       vars:
-        apache_server_name: foo.example.com
+        apache_server_name:
+           - foo.example.com
+           - bar.example.com
         certbot_email: reminders@mydomain.com
 
 
@@ -30,6 +32,6 @@ And don't forget your `hosts` file:
           ansible_user: root
 
 
-And then I run it from that dir with:
+And then I can run it from that dir with:
 
     ansible-playbook -i hosts foo.example.com --tags apache-certbot
