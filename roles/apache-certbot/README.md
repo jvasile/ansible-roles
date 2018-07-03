@@ -7,7 +7,9 @@ You will need to set two variables:
      certbot_email = your email so you get reminders to renew
 
        vars:
-          apache_server_name: sharks.withlasers.com
+          apache_server_name: 
+            - sharks.withlasers.com
+            - guppies.withlasers.com
           certbot_email = your@email.address.com
 
 This role sets up a temporary apache configuration that handles
