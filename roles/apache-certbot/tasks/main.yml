@@ -30,7 +30,7 @@
 - name: Clear out any old lets encrypt config
   # We don't want conf files and keys with 001 in the name
   file:
-    path: /etc/letsencrypt/renewal/{{ apache_server_name }}.conf
+    path: /etc/letsencrypt/
     state: absent
     
 - name: Use certbot http challenge to generate or renew ssl certs
