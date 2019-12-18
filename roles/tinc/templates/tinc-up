@@ -1,0 +1,3 @@
+#!/bin/sh
+IP="{{ tinc_ip }}"
+ifconfig $INTERFACE $IP netmask 255.255.255.0

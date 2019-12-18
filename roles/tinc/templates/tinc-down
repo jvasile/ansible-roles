@@ -1,0 +1,3 @@
+#!/bin/sh
+VPN_NAME="{{ tinc_netname }}"
+ifconfig $VPN_NAME down

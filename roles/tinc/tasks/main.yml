@@ -1,0 +1,142 @@
+---
+- name: Install base things for FreeBSD
+  pkgng:		
+    name: py36-pexpect
+    state: present
+  when: ansible_distribution == "FreeBSD"
+  
+- name: Install base things for Debian / Ubuntu
+  action: >
+    {{ ansible_pkg_mgr }} name={{ item }} state=present
+  with_items:
+    - python-pexpect
+  when: ansible_distribution != "FreeBSD"
+    
+- name: Install tinc
+  action: >
+    {{ ansible_pkg_mgr }} name={{ item }} state=present
+  with_items:
+    - tinc
+
+- name: Make tinc dirs
+  file:
+    path: "{{ etc_prefix }}/etc/tinc/{{ tinc_netname }}/hosts"
+    state: directory
+    recurse: yes
+
+- name: Place tinc.conf
+  template:
+    src: roles/tinc/templates/tinc.conf
+    dest: "{{ etc_prefix }}/etc/tinc/{{ tinc_netname }}/tinc.conf"
+    mode: 0644
+    
+- name: Place tinc-up
+  template:
+    src: roles/tinc/templates/tinc-up
+    dest: "{{ etc_prefix }}/etc/tinc/{{ tinc_netname }}/tinc-up"
+    mode: 0755
+    
+- name: Place tinc-down
+  template:
+    src: roles/tinc/templates/tinc-down
+    dest: "{{ etc_prefix }}/etc/tinc/{{ tinc_netname }}/tinc-down"
+    mode: 0755
+
+- name: Check if tinc has a priv key
+  stat: path=/usr/local/etc/tinc/{{ tinc_netname }}/rsa_key.priv
+  register: privkey
+- name: Generate tinc private key
+  expect:
+    command: tincd -K -n tinc
+    echo: yes
+    responses:
+      to save private RSA: "\n"
+      to save public RSA: "{{ etc_prefix }}/etc/tinc/{{ tinc_netname }}/hosts/{{ inventory_hostname }}\n"
+  when: not privkey.stat.exists
+
+- name: Add netname to nets.boot
+  lineinfile:
+    path: "{{ etc_prefix }}/etc/tinc/{{ tinc_netname }}/hosts/{{ inventory_hostname }}"
+    line: 'Subnet = {{ tinc_ip }}'
+    
+- name: Get ip address
+  shell: ifconfig {{ tinc_public_interface }} | grep "inet " | sed "s/.*inet \(.*\)  netmask.*/\1/"
+  register: tinc_public_ip
+- name: Add address line to tinc host file
+  lineinfile:
+    path: "{{ etc_prefix }}/etc/tinc/{{ tinc_netname }}/hosts/{{ inventory_hostname }}"
+    line: Address = {{ tinc_public_ip.stdout }}
+    
+- name: Fetch the public key
+  fetch:
+    src: "{{ etc_prefix }}/etc/tinc/{{ tinc_netname }}/hosts/{{ inventory_hostname }}"
+    dest: /etc/tinc/{{ tinc_netname }}/hosts/{{ inventory_hostname }}
+    flat: yes
+  tags:
+    - tinc_publish
+
+# We do this *after* we download the public key so we don't clobber a
+# new key with an old one
+- name: Publish full list of tinc hosts to remote
+  copy:
+    src: "{{ item }}"
+    dest: "{{ etc_prefix }}/etc/tinc/{{ tinc_netname }}/hosts/"
+    owner: root
+    mode: 0644
+  with_fileglob:
+    - /etc/tinc/tinc/hosts/*
+  tags:
+    tinc_publish
+    
+    
+# This file gets ignored on freebsd
+- name: Add netname to nets.boot
+  lineinfile:
+    path: "{{ etc_prefix }}/etc/tinc/nets.boot"
+    line: '{{ tinc_netname }}'
+    create: yes
+  when: ansible_distribution != "FreeBSD"
+
+- name: Make local rc.d dir
+  file:
+    path: "{{ etc_prefix }}/etc/rc.d"
+    state: directory
+  when: ansible_distribution == "FreeBSD"
+
+- name: rc.d script to create tun device
+  copy:
+    content: "ls /dev | grep -q tun0 || ifconfig tun0 create"
+    dest: "{{ etc_prefix }}/etc/rc.d/create_tun0"
+    mode: 0755
+  when: ansible_distribution == "FreeBSD"
+
+- name: Enable tinc
+  lineinfile:
+    path: /etc/rc.conf
+    regexp: '^tincd_enable'
+    line: 'tincd_enable="YES"'
+  when: ansible_distribution == "FreeBSD"
+    
+- name: Enable tinc netname
+  lineinfile:
+    path: /etc/rc.conf
+    regexp: '^tincd_cfg'
+    line: 'tincd_cfg="{{ tinc_netname }}"'
+  when: ansible_distribution == "FreeBSD"
+
+- name: Restart tinc
+  systemd:
+    name: tinc@tinc
+    state: restarted
+
+- name: Add tinc nodes to /etc/hosts
+  blockinfile:
+    dest: /etc/hosts
+    block: |
+      172.16.50.1 hydrogen.tinc
+      172.16.50.2 helium.tinc
+      172.16.50.3 lithium.tinc
+      172.16.50.56 barium.tinc
+      172.16.50.78 platinum.tinc
+      172.16.50.87 francium.tinc
+      172.16.50.96 curium.tinc
